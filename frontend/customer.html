@@ -4,29 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agendamento - Agenda Pro</title>
-    <link rel="stylesheet" href="style.css?v=5">
-    <script src="config.js?v=2"></script>
+    <script src="config.js?v=3"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
     <div class="customer-wrapper">
         <header class="customer-header">
             <button class="back-button" onclick="window.location.href='index.html'">← Voltar</button>
             <div class="logo">Agenda <span>Pro</span></div>
-            <h1 id="business-display-name" style="margin-top: 15px; font-size: 24px;">Carregando estabelecimento...</h1>
-            <button id="switch-business-btn" type="button" style="display:none; background:none; border:none; color:#2563EB; text-decoration:underline; cursor:pointer; font-size:14px; margin-top:6px;">Não é esse estabelecimento? Trocar</button>
+            <h1 id="business-display-name" style="margin-top: 15px; font-size: 22px;">Carregando estabelecimento...</h1>
+            <button id="switch-business-btn" type="button" style="display:none; background:none; border:none; color:var(--primary); text-decoration:underline; cursor:pointer; font-size:14px; margin-top:6px; font-family:inherit;">Não é esse estabelecimento? Trocar</button>
         </header>
 
         <div id="select-business-section" class="form-card" style="display: none; margin-bottom: 25px;">
             <h2>Buscar Estabelecimento</h2>
             <p class="section-description">Digite o nome ou selecione o local onde deseja agendar:</p>
             <input type="text" id="search-business-input" class="input_field" placeholder="Ex: Barbearia Silva">
-            <p id="business-search-status" style="font-size: 14px; color: #2563EB; font-weight: 600;"></p>
+            <p id="business-search-status" style="font-size: 14px; color: var(--primary); font-weight: 600;"></p>
         </div>
 
         <main class="customer-container">
             <section class="form-card">
                 <h2>1. Primeira vez aqui?</h2>
-                <p class="section-description">Caso seja seu primeiro agendamento neste estabelecimento, cadastre seu nome e telefone abaixo. Se já for cliente, você pode seguir direto para o passo 2.</p>
+                <p class="section-description">Caso seja seu primeiro agendamento neste estabelecimento, cadastre seu nome e telefone abaixo. Se já for cliente, você pode seguir direto para os próximos passos.</p>
                 <form id="client-form">
                     <input type="text" id="client-name" class="input_field" placeholder="Seu nome completo" required>
                     <input type="tel" id="client-phone" class="input_field" placeholder="Seu WhatsApp" required>
@@ -34,15 +37,21 @@
                 </form>
             </section>
 
+            <section class="form-card" id="services-section" style="display:none;">
+                <h2>2. Escolha o Serviço</h2>
+                <p class="section-description">Selecione o serviço desejado.</p>
+                <div id="services-list"></div>
+            </section>
+
             <section class="form-card">
-                <h2>2. Escolha a Data e Horário</h2>
+                <h2 id="datetime-step-title">2. Escolha a Data e Horário</h2>
                 <p class="section-description">Digite seu telefone para identificarmos seu cadastro, e escolha um horário disponível.</p>
 
                 <form id="appointment-form">
                     <label style="display:block; margin-bottom: 8px; font-weight: 600;">Seu WhatsApp</label>
                     <input type="tel" id="confirm-phone" class="input_field" placeholder="Digite o telefone do seu cadastro" required>
                     <p id="client-found-msg" class="section-description" style="min-height: 20px; margin-top: -8px;"></p>
-                    <div id="existing-appointments-box" style="display:none; background:#EFF6FF; border-radius:10px; padding:14px 16px; margin-bottom:18px; font-size:14px; color:#1E40AF;"></div>
+                    <div id="existing-appointments-box" style="display:none; background:var(--primary-light); border-radius:10px; padding:14px 16px; margin-bottom:18px; font-size:14px; color:var(--primary-darker);"></div>
 
                     <label style="display:block; margin-bottom: 8px; font-weight: 600;">Data do Agendamento</label>
                     <input type="date" id="appointment-date" class="input_field" required>
@@ -59,8 +68,8 @@
     </div>
 
     <div id="toast"></div>
-    <script src="toast.js?v=2"></script>
-    <script src="clients.js?v=3"></script>
-    <script src="appointments.js?v=4"></script>
+    <script src="toast.js?v=3"></script>
+    <script src="clients.js?v=4"></script>
+    <script src="appointments.js?v=6"></script>
 </body>
 </html>

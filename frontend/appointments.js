@@ -1,4 +1,6 @@
 window.currentBusinessId = null
+window.foundClientId = null
+window.selectedServiceId = null
 
 // Converte data no formato AAAA-MM-DD (usado internamente) para DD/MM/AAAA (formato brasileiro)
 function formatDateBR(isoDate) {
@@ -9,11 +11,19 @@ function formatDateBR(isoDate) {
     return `${day}/${month}/${year}`
 }
 
+function formatPriceBR(value) {
+    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
 const businessDisplayName = document.getElementById("business-display-name")
 const switchBusinessBtn = document.getElementById("switch-business-btn")
 const selectBusinessSection = document.getElementById("select-business-section")
 const searchBusinessInput = document.getElementById("search-business-input")
 const businessSearchStatus = document.getElementById("business-search-status")
+
+const servicesSection = document.getElementById("services-section")
+const servicesList = document.getElementById("services-list")
+const datetimeStepTitle = document.getElementById("datetime-step-title")
 
 const appointmentForm = document.getElementById("appointment-form")
 const confirmPhone = document.getElementById("confirm-phone")
@@ -22,9 +32,6 @@ const existingAppointmentsBox = document.getElementById("existing-appointments-b
 const appointmentDate = document.getElementById("appointment-date")
 const timeSelect = document.getElementById("time-select")
 const submitAppointmentBtn = document.getElementById("submit-appointment-btn")
-
-// Guarda o id do cliente encontrado pela busca do telefone
-window.foundClientId = null
 
 function initBusinessContext() {
     const urlParams = new URLSearchParams(window.location.search)
@@ -44,8 +51,6 @@ function initBusinessContext() {
         return
     }
 
-    // Sem slug na URL: tenta usar o último estabelecimento escolhido nesta aba,
-    // pra não obrigar a pessoa a buscar de novo se ela já tinha selecionado.
     const savedId = sessionStorage.getItem("selectedBusinessId")
     const savedName = sessionStorage.getItem("selectedBusinessName")
     if (savedId && savedName) {
@@ -64,6 +69,7 @@ function setBusiness(id, name) {
     if (switchBusinessBtn) switchBusinessBtn.style.display = "inline-block"
     const submitClientBtn = document.getElementById("submit-client-btn")
     if (submitClientBtn) submitClientBtn.disabled = false
+    loadServices()
 }
 
 function showBusinessSearch(message = "") {
@@ -103,8 +109,57 @@ if (searchBusinessInput) {
     })
 }
 
-// Busca o cliente pelo telefone digitado, assim que a pessoa termina de digitar,
-// e também mostra se ela já tem algum agendamento futuro marcado (lembrete).
+// --- SERVIÇOS ---
+function loadServices() {
+    if (!window.currentBusinessId || !servicesList) return
+
+    fetch(`${API_URL}/services/public/${window.currentBusinessId}`)
+    .then(res => res.json())
+    .then(services => {
+        if (!services || services.length === 0) {
+            servicesSection.style.display = "none"
+            datetimeStepTitle.innerText = "2. Escolha a Data e Horário"
+            return
+        }
+
+        servicesSection.style.display = "block"
+        datetimeStepTitle.innerText = "3. Escolha a Data e Horário"
+        servicesList.innerHTML = ""
+
+        services.forEach(service => {
+            const option = document.createElement("div")
+            option.classList.add("service-option")
+
+            const info = document.createElement("div")
+            const nameEl = document.createElement("div")
+            nameEl.classList.add("service-name")
+            nameEl.innerText = service.name
+            const durationEl = document.createElement("div")
+            durationEl.classList.add("service-duration")
+            durationEl.innerText = `${service.duration_minutes} min`
+            info.appendChild(nameEl)
+            info.appendChild(durationEl)
+
+            const price = document.createElement("div")
+            price.classList.add("price-tag")
+            price.innerText = formatPriceBR(service.price)
+
+            option.appendChild(info)
+            option.appendChild(price)
+
+            option.addEventListener("click", function() {
+                document.querySelectorAll(".service-option").forEach(el => el.classList.remove("selected"))
+                option.classList.add("selected")
+                window.selectedServiceId = service.id
+            })
+
+            servicesList.appendChild(option)
+        })
+    })
+    .catch(error => console.error(error))
+}
+
+// Busca o cliente pelo telefone digitado, e mostra lembrete de agendamentos futuros
 let lookupTimeout = null
 if (confirmPhone) {
     confirmPhone.addEventListener("input", function() {
@@ -127,9 +182,8 @@ if (confirmPhone) {
             .then(data => {
                 window.foundClientId = data.client_id
                 clientFoundMsg.innerText = `✓ Agendando para ${data.name}`
-                clientFoundMsg.style.color = "green"
+                clientFoundMsg.style.color = "var(--success)"
 
-                // Verifica se esse cliente já tem agendamentos marcados nesse estabelecimento
                 fetch(`${API_URL}/client/appointments?business_id=${window.currentBusinessId}&phone=${encodeURIComponent(phone)}`)
                 .then(res => res.json())
                 .then(appointments => {
@@ -150,7 +204,7 @@ if (confirmPhone) {
             .catch(error => {
                 window.foundClientId = null
                 clientFoundMsg.innerText = "Não encontramos esse telefone. Cadastre-se no passo 1 primeiro."
-                clientFoundMsg.style.color = "#c0392b"
+                clientFoundMsg.style.color = "var(--danger)"
                 if (existingAppointmentsBox) existingAppointmentsBox.style.display = "none"
             })
         }, 500)
@@ -194,12 +248,19 @@ appointmentForm.addEventListener("submit", function(event) {
         return
     }
 
+    const servicesConfigured = servicesSection && servicesSection.style.display !== "none"
+    if (servicesConfigured && !window.selectedServiceId) {
+        showToast("Selecione um serviço antes de continuar.", true)
+        return
+    }
+
     fetch(`${API_URL}/appointment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             business_id: window.currentBusinessId,
             client_id: window.foundClientId,
+            service_id: window.selectedServiceId,
             phone: confirmPhone.value.trim(),
             date: appointmentDate.value,
             time: timeSelect.value
@@ -217,6 +278,8 @@ appointmentForm.addEventListener("submit", function(event) {
         clientFoundMsg.innerText = ""
         if (existingAppointmentsBox) existingAppointmentsBox.style.display = "none"
         window.foundClientId = null
+        window.selectedServiceId = null
+        document.querySelectorAll(".service-option").forEach(el => el.classList.remove("selected"))
         timeSelect.disabled = true
         submitAppointmentBtn.disabled = true
     })

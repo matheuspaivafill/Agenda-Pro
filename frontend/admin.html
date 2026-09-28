@@ -2,19 +2,20 @@
 <html lang="pt-BR">
 
 <head>
-    
+
     <meta charset="UTF-8">
 
-    <title>Administração</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <link rel="stylesheet" href="style.css?v=5">
+    <title>Administração - Agenda Pro</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
 
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css?v=6">
 
 </head>
 
@@ -36,11 +37,11 @@
             </p>
 
             <p class="dashboard-description">
-                Gerencie clientes, acompanhe agendamentos e mantenha sua agenda organizada.
+                Gerencie clientes, serviços e agendamentos, e mantenha sua agenda organizada.
             </p>
 
-            <div class="share-link-box" style="margin-top: 16px; padding: 12px 16px; background: #f7f7f7; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <span style="font-size: 14px; color: #555;">Link para seus clientes agendarem:</span>
+            <div class="share-link-box" style="margin-top: 16px; padding: 12px 16px; background: var(--bg); border-radius: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 14px; color: var(--ink-soft);">Link para seus clientes agendarem:</span>
                 <input id="share-link-input" type="text" readonly class="input_field" style="flex: 1; min-width: 220px; margin: 0; font-size: 13px;">
                 <button id="copy-link-btn" class="btn-secondary" type="button">Copiar link</button>
             </div>
@@ -51,8 +52,9 @@
 
     </div>
 
-    <div class="tabs-nav" style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid #e5e7eb;">
+    <div class="tabs-nav" style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
         <button id="tab-btn-overview" class="tab-button active" type="button">Clientes e Agendamentos</button>
+        <button id="tab-btn-services" class="tab-button" type="button">Serviços</button>
         <button id="tab-btn-schedule" class="tab-button" type="button">Horários e Bloqueios</button>
     </div>
 
@@ -61,100 +63,73 @@
     <div class="dashboard">
 
         <div class="summary-card">
-
-            <div class="summary-icon">
-                👥
-            </div>
-
+            <div class="summary-icon">👥</div>
             <h3>Clientes</h3>
-
-            <strong id="total-clients">
-                0
-            </strong>
-
-            <span>
-                cadastrados
-            </span>
-
+            <strong id="total-clients">0</strong>
+            <span>cadastrados</span>
         </div>
 
         <div class="summary-card">
-
-            <div class="summary-icon">
-                📅
-            </div>
-
+            <div class="summary-icon">📅</div>
             <h3>Agendamentos</h3>
-
-            <strong id="total-appointments">
-                0
-            </strong>
-
-            <span>
-                marcados
-            </span>
-
-            </div>
+            <strong id="total-appointments">0</strong>
+            <span>marcados</span>
+        </div>
 
     </div>
 
     <hr class="section-divider">
 
         <div class="section-header">
-
-            <h2 id="clients-title">
-                Clientes
-            </h2>
-
-            <button
-                class="action-button"
-                onclick="window.location.href='customer.html'">
-
-                + Novo Cliente
-
-            </button>
-
+            <h2 id="clients-title">Clientes</h2>
+            <button class="action-button" onclick="window.location.href='customer.html'">+ Novo Cliente</button>
         </div>
 
         <div class="search-box">
+            <input type="text" id="search-client" placeholder="Pesquisar cliente...">
+        </div>
 
-        <input
-            type="text"
-            id="search-client"
-            placeholder="Pesquisar cliente...">
+        <div id="clients-list"></div>
 
-    </div>
+        <div class="section-header">
+            <h2 id="appointments-title">Agendamentos</h2>
+            <button class="action-button" onclick="window.location.href='customer.html'">+ Novo Agendamento</button>
+        </div>
 
-    <div id="clients-list"></div>
+        <div class="search-box">
+            <input type="text" id="search-appointment" placeholder="Pesquisar agendamento...">
+        </div>
 
-
-
-    <div class="section-header">
-
-        <h2 id="appointments-title">
-            Agendamentos
-        </h2>
-
-        <button
-            class="action-button"
-            onclick="window.location.href='customer.html'">
-
-            + Novo Agendamento
-
-        </button>
+        <div id="appointments-list"></div>
 
     </div>
 
-    <div class="search-box">
+    <div id="tab-services" style="display:none;">
 
-        <input
-            type="text"
-            id="search-appointment"
-            placeholder="Pesquisar agendamento...">
+        <div class="section-header">
+            <h2>Cadastrar Serviço</h2>
+        </div>
+        <p class="section-description">Cadastre os serviços que você oferece, com preço e tempo estimado. Eles aparecem pro cliente escolher na hora de agendar.</p>
 
-    </div>
+        <div style="display:flex; gap:15px; flex-wrap:wrap; align-items:flex-end; margin-bottom:15px;">
+            <div style="flex:2; min-width:180px;">
+                <label style="display:block; margin-bottom:8px; font-weight:600;">Nome do serviço</label>
+                <input type="text" id="service-name" class="input_field" placeholder="Ex: Corte + Barba" style="margin-bottom:0;">
+            </div>
+            <div style="flex:1; min-width:120px;">
+                <label style="display:block; margin-bottom:8px; font-weight:600;">Preço (R$)</label>
+                <input type="number" id="service-price" class="input_field" placeholder="45.00" min="0" step="0.01" style="margin-bottom:0;">
+            </div>
+            <div style="flex:1; min-width:140px;">
+                <label style="display:block; margin-bottom:8px; font-weight:600;">Duração (min)</label>
+                <input type="number" id="service-duration" class="input_field" placeholder="30" min="5" max="480" step="5" style="margin-bottom:0;">
+            </div>
+        </div>
 
-    <div id="appointments-list"></div>
+        <button id="save-service-btn" class="action-button" type="button">Cadastrar Serviço</button>
+
+        <h3 style="margin-top:28px; margin-bottom:14px;">Seus serviços</h3>
+        <div id="services-list-admin"></div>
 
     </div>
 
@@ -200,7 +175,7 @@
         <div style="max-width:340px; margin-bottom:20px;">
             <label style="display:block; margin-bottom:8px; font-weight:600;">Quantos atendimentos ao mesmo tempo?</label>
             <input type="number" id="schedule-capacity" class="input_field" min="1" max="20" value="1">
-            <p class="section-description" style="margin-top:-8px;">Ex: se você tem 2 profissionais atendendo juntos, coloque 2 — assim o sistema permite 2 clientes no mesmo horário antes de bloquear.</p>
+            <p class="section-description" style="margin-top:-8px;">Ex: se você tem 2 profissionais atendendo juntos, coloque 2.</p>
         </div>
 
         <button id="save-schedule-btn" class="action-button" type="button">Salvar Horário</button>
@@ -210,7 +185,7 @@
         <div class="section-header">
             <h2>Bloquear Dias e Horários</h2>
         </div>
-        <p class="section-description">Bloqueie um dia inteiro (ex: uma viagem) ou só um horário específico (ex: já foi marcado por telefone).</p>
+        <p class="section-description">Bloqueie um dia inteiro (ex: uma viagem) ou só um horário específico.</p>
 
         <div style="display:flex; gap:15px; flex-wrap:wrap; align-items:flex-end; margin-bottom:15px;">
             <div style="flex:1; min-width:140px;">
@@ -235,21 +210,14 @@
 
     </div>
 
-        <button
-            class="register-button"
-            type="button"
-            onclick="window.location.href='index.html'">
-
-            ← Voltar
-
-        </button>
+        <button class="btn-secondary" type="button" onclick="window.location.href='index.html'" style="margin-top:30px;">← Voltar</button>
 
     </div>
 
-        <script src="config.js?v=2"></script>
+        <script src="config.js?v=3"></script>
         <div id="toast"></div>
-        <script src="toast.js?v=2"></script>
-        <script src="admin.js?v=6"></script>
+        <script src="toast.js?v=3"></script>
+        <script src="admin.js?v=7"></script>
 
 </body>
 

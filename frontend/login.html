@@ -4,31 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Agenda Pro</title>
-    <link rel="stylesheet" href="style.css?v=5">
-    <script src="config.js?v=2"></script>
+    <script src="config.js?v=3"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
     <div class="home-container">
-        <div class="logo">Agenda <span>Pro</span></div>
+        <h1 class="logo">Agenda <span>Pro</span></h1>
         <p class="subtitle">Acesse o painel do seu estabelecimento</p>
 
-        <form id="login-form" class="form-card" style="text-align: left; max-width: 400px; margin: 0 auto;">
-            <label style="display:block; margin-bottom: 8px; font-weight: 600;">E-mail</label>
+        <form id="login-form" style="margin-top: 28px; text-align: left;">
+            <label style="display:block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">E-mail</label>
             <input type="email" id="login-email" class="input_field" placeholder="seu@email.com" required>
 
-            <label style="display:block; margin-bottom: 8px; font-weight: 600;">Senha</label>
-            <input type="password" id="login-password" class="input_field" placeholder="******" required>
+            <label style="display:block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">Senha</label>
+            <input type="password" id="login-password" class="input_field" placeholder="••••••" required>
 
-            <button type="submit" class="register-button">Entrar</button>
+            <button type="submit" class="register-button" style="margin-top: 8px;">Entrar</button>
         </form>
 
-        <p style="margin-top: 25px;">
-            Ainda não tem conta? <a href="register.html" style="color: #2563EB; font-weight: 600; text-decoration: none;">Cadastre o seu estabelecimento</a>
+        <p style="margin-top: 20px; font-size: 14px; color: var(--muted);">
+            Ainda não tem conta? <a href="register.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Cadastre o seu estabelecimento</a>
         </p>
     </div>
 
     <div id="toast"></div>
-    <script src="toast.js?v=2"></script>
-    <script src="login.js?v=2"></script>
+    <script src="toast.js?v=3"></script>
+    <script src="login.js?v=3"></script>
 </body>
 </html>

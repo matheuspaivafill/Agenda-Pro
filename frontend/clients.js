@@ -30,7 +30,6 @@ if (clientForm) {
 
             clientName.value = ""
 
-            // Preenche automaticamente o telefone no passo 2, pra não ter que digitar de novo
             const confirmPhoneField = document.getElementById("confirm-phone")
             if (confirmPhoneField) {
                 confirmPhoneField.value = clientPhone.value.trim()

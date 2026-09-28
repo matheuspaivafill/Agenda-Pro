@@ -1,7 +1,11 @@
 import re
 import os
 import jwt
+import secrets
+import urllib.request
+import json as jsonlib
 from datetime import datetime, timedelta
+from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException, status, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -10,8 +14,12 @@ from sqlalchemy.orm import Session
 import bcrypt
 
 from database import engine, Base, SessionLocal, get_db
-from models import Business, Client, Appointment, BlockedSlot
-from schemas import BusinessCreate, BusinessLogin, ClientCreate, AppointmentCreate, ScheduleUpdate, BlockedSlotCreate
+from models import Business, Client, Appointment, BlockedSlot, Service
+from schemas import (
+    BusinessCreate, BusinessLogin, ClientCreate, AppointmentCreate,
+    ScheduleUpdate, BlockedSlotCreate, ServiceCreate,
+    AppointmentUpdate, ForgotPasswordRequest, ResetPasswordRequest, CancelAppointmentRequest
+)
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
@@ -21,13 +29,11 @@ if not SECRET_KEY:
     )
 ALGORITHM = "HS256"
 
-# Lista de origens autorizadas a chamar a API (troque pelo domínio real em produção)
 ALLOWED_ORIGINS = os.environ.get(
     "ALLOWED_ORIGINS",
     "http://127.0.0.1:5500,http://localhost:5500"
 ).split(",")
 
-# Cria as tabelas atualizadas no banco de dados
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -41,26 +47,19 @@ app.add_middleware(
 )
 
 
-# Transforma os erros técnicos de validação (422) em mensagens simples,
-# em português, para aparecerem certinho nos toasts do frontend.
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     first_error = exc.errors()[0]
     field = first_error["loc"][-1] if first_error.get("loc") else "campo"
     message = first_error.get("msg", "Valor inválido.")
     message = message.replace("Value error, ", "")
-    return JSONResponse(
-        status_code=422,
-        content={"detail": f"{field}: {message}"}
-    )
+    return JSONResponse(status_code=422, content={"detail": f"{field}: {message}"})
 
 
-# Função auxiliar para gerar hash de senha
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")[:72]
     return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
-# Função auxiliar para verificar senha
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     password_bytes = plain_password.encode("utf-8")[:72]
     try:
@@ -68,7 +67,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except ValueError:
         return False
 
-# Função auxiliar para criar Token JWT
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=7)
@@ -76,30 +74,65 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://127.0.0.1:5500")
+
+
+def send_reset_email(to_email: str, reset_link: str):
+    """Envia o e-mail de recuperação de senha via Resend. Se a chave não estiver
+    configurada, apenas registra no log (não quebra o fluxo, mas o e-mail não sai)."""
+    if not RESEND_API_KEY:
+        print(f"[AVISO] RESEND_API_KEY não configurada. Link de recuperação (não enviado): {reset_link}")
+        return
+
+    payload = jsonlib.dumps({
+        "from": f"Agenda Pro <{RESEND_FROM_EMAIL}>",
+        "to": [to_email],
+        "subject": "Recuperação de senha - Agenda Pro",
+        "html": (
+            f"<p>Você pediu para redefinir sua senha no Agenda Pro.</p>"
+            f"<p><a href='{reset_link}'>Clique aqui para criar uma nova senha</a></p>"
+            f"<p>Se você não pediu isso, pode ignorar este e-mail.</p>"
+        )
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"[ERRO] Falha ao enviar e-mail de recuperação: {e}")
+
+
 def get_current_business(authorization: str = Header(None), db: Session = Depends(get_db)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Não autenticado.")
-
     token = authorization.split(" ")[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         business_id = payload.get("business_id")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
-
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=401, detail="Estabelecimento não encontrado.")
     return business
 
 
-# --- CADASTRO E LOGIN DO ESTABELECIMENTO ---
+# --- CADASTRO E LOGIN ---
 
 @app.post("/register", status_code=status.HTTP_201_CREATED)
 def register_business(business_data: BusinessCreate, db: Session = Depends(get_db)):
     if db.query(Business).filter(Business.email == business_data.email).first():
         raise HTTPException(status_code=400, detail="Esse e-mail já está cadastrado.")
-
     if db.query(Business).filter(Business.slug == business_data.slug).first():
         raise HTTPException(status_code=400, detail="Esse link personalizado já está em uso.")
 
@@ -122,7 +155,6 @@ def login(login_data: BusinessLogin, db: Session = Depends(get_db)):
     business = db.query(Business).filter(Business.email == login_data.email).first()
     if not business or not verify_password(login_data.password, business.password_hash):
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
-
     token = create_access_token({"business_id": business.id})
     return {"message": "Login realizado com sucesso!", "token": token, "slug": business.slug}
 
@@ -135,49 +167,39 @@ def get_business_by_slug(slug: str, db: Session = Depends(get_db)):
     return {"id": business.id, "name": business.name, "slug": business.slug}
 
 
-# --- ROTAS PÚBLICAS DO CLIENTE (Para agendamento na página pública) ---
+# --- CLIENTE PÚBLICO ---
 
 def digits_only(s: str) -> str:
     return re.sub(r"\D", "", s)
 
-
 def find_client_by_phone(db: Session, business_id: int, phone: str):
     target = digits_only(phone)
     return next(
-        (
-            c for c in db.query(Client).filter(Client.business_id == business_id).all()
-            if digits_only(c.phone) == target
-        ),
+        (c for c in db.query(Client).filter(Client.business_id == business_id).all()
+         if digits_only(c.phone) == target),
         None
     )
-
 
 @app.get("/client/lookup")
 def lookup_client(business_id: int, phone: str, db: Session = Depends(get_db)):
     if len(digits_only(phone)) < 8:
         raise HTTPException(status_code=400, detail="Telefone incompleto.")
-
     client = find_client_by_phone(db, business_id, phone)
     if not client:
         raise HTTPException(status_code=404, detail="Nenhum cadastro encontrado com esse telefone.")
-
     return {"client_id": client.id, "name": client.name}
 
 
 @app.get("/client/appointments")
 def client_upcoming_appointments(business_id: int, phone: str, db: Session = Depends(get_db)):
-    """Retorna os agendamentos futuros de um cliente nesse estabelecimento,
-    identificado pelo telefone. Usado para lembrar o cliente de horários já marcados."""
     client = find_client_by_phone(db, business_id, phone)
     if not client:
         return []
-
     today = datetime.now().date()
     appointments = db.query(Appointment).filter(
         Appointment.business_id == business_id,
         Appointment.client_id == client.id
     ).all()
-
     upcoming = []
     for ap in appointments:
         try:
@@ -186,7 +208,6 @@ def client_upcoming_appointments(business_id: int, phone: str, db: Session = Dep
             continue
         if ap_date >= today:
             upcoming.append({"date": ap.date, "time": ap.time})
-
     upcoming.sort(key=lambda a: (a["date"], a["time"]))
     return upcoming
 
@@ -197,8 +218,6 @@ def create_client(client: ClientCreate, db: Session = Depends(get_db)):
     if not business:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado.")
 
-    # Se já existe um cliente com esse telefone nesse estabelecimento, não duplica o
-    # cadastro — apenas avisa que a pessoa já pode agendar direto no passo 2.
     existing_client = find_client_by_phone(db, client.business_id, client.phone)
     if existing_client:
         return {
@@ -208,25 +227,94 @@ def create_client(client: ClientCreate, db: Session = Depends(get_db)):
             "already_registered": True
         }
 
-    new_client = Client(
-        business_id=client.business_id,
-        name=client.name,
-        phone=client.phone
-    )
+    new_client = Client(business_id=client.business_id, name=client.name, phone=client.phone)
     db.add(new_client)
     db.commit()
     db.refresh(new_client)
     return {"message": "Cliente cadastrado com sucesso!", "client_id": new_client.id, "already_registered": False}
 
 
+# --- SERVIÇOS (públicos para leitura, protegidos para editar) ---
+
+@app.get("/services/public/{business_id}")
+def list_public_services(business_id: int, db: Session = Depends(get_db)):
+    services = db.query(Service).filter(Service.business_id == business_id).all()
+    return [
+        {"id": s.id, "name": s.name, "price": float(s.price), "duration_minutes": s.duration_minutes}
+        for s in services
+    ]
+
+@app.get("/services")
+def list_services(
+    current_business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db)
+):
+    services = db.query(Service).filter(Service.business_id == current_business.id).all()
+    return [
+        {"id": s.id, "name": s.name, "price": float(s.price), "duration_minutes": s.duration_minutes}
+        for s in services
+    ]
+
+@app.post("/services", status_code=status.HTTP_201_CREATED)
+def create_service(
+    service: ServiceCreate,
+    current_business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db)
+):
+    new_service = Service(
+        business_id=current_business.id,
+        name=service.name,
+        price=service.price,
+        duration_minutes=service.duration_minutes
+    )
+    db.add(new_service)
+    db.commit()
+    db.refresh(new_service)
+    return {"message": "Serviço cadastrado com sucesso!", "id": new_service.id}
+
+@app.put("/services/{service_id}")
+def update_service(
+    service_id: int,
+    service: ServiceCreate,
+    current_business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(Service).filter(
+        Service.id == service_id,
+        Service.business_id == current_business.id
+    ).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    existing.name = service.name
+    existing.price = service.price
+    existing.duration_minutes = service.duration_minutes
+    db.commit()
+    return {"message": "Serviço atualizado com sucesso!"}
+
+@app.delete("/services/{service_id}")
+def delete_service(
+    service_id: int,
+    current_business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(Service).filter(
+        Service.id == service_id,
+        Service.business_id == current_business.id
+    ).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    db.delete(existing)
+    db.commit()
+    return {"message": "Serviço removido com sucesso!"}
+
+
+# --- HORÁRIOS E AGENDAMENTO ---
+
 def generate_time_slots(start_time: str, end_time: str, duration_minutes: int = 60) -> list[str]:
-    """Gera os horários disponíveis entre o início e o fim, no intervalo configurado."""
     start_h, start_m = map(int, start_time.split(":"))
     end_h, end_m = map(int, end_time.split(":"))
-
     start_total = start_h * 60 + start_m
     end_total = end_h * 60 + end_m
-
     slots = []
     current = start_total
     while current + duration_minutes <= end_total:
@@ -238,7 +326,6 @@ def generate_time_slots(start_time: str, end_time: str, duration_minutes: int = 
 
 
 def get_business_day_blocked(db: Session, business_id: int, date: str) -> bool:
-    """Verifica se o DIA INTEIRO está bloqueado pro estabelecimento."""
     return db.query(BlockedSlot).filter(
         BlockedSlot.business_id == business_id,
         BlockedSlot.date == date,
@@ -273,8 +360,6 @@ def available_times(business_id: int, date: str, db: Session = Depends(get_db)):
         Appointment.business_id == business_id,
         Appointment.date == date
     ).all()
-    # Conta quantos agendamentos já existem em cada horário — um horário só fica
-    # indisponível quando atinge a capacidade (nº de profissionais) do estabelecimento.
     occupied_count = {}
     for ap in appointments_day:
         occupied_count[ap.time] = occupied_count.get(ap.time, 0) + 1
@@ -305,10 +390,16 @@ def create_appointment(appointment: AppointmentCreate, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Cliente não encontrado neste estabelecimento.")
 
     if digits_only(appointment.phone) != digits_only(client.phone):
-        raise HTTPException(
-            status_code=403,
-            detail="O telefone informado não confere com o cadastro deste cliente."
-        )
+        raise HTTPException(status_code=403, detail="O telefone informado não confere com o cadastro deste cliente.")
+
+    service = None
+    if appointment.service_id is not None:
+        service = db.query(Service).filter(
+            Service.id == appointment.service_id,
+            Service.business_id == appointment.business_id
+        ).first()
+        if not service:
+            raise HTTPException(status_code=404, detail="Serviço não encontrado.")
 
     try:
         parsed_date = datetime.strptime(appointment.date, "%Y-%m-%d").date()
@@ -342,13 +433,13 @@ def create_appointment(appointment: AppointmentCreate, db: Session = Depends(get
         Appointment.date == appointment.date,
         Appointment.time == appointment.time
     ).count()
-
     if existing_count >= business.capacity:
         raise HTTPException(status_code=400, detail="Horário já ocupado nesta empresa.")
 
     new_appointment = Appointment(
         business_id=appointment.business_id,
         client_id=appointment.client_id,
+        service_id=service.id if service else None,
         date=appointment.date,
         time=appointment.time
     )
@@ -358,61 +449,43 @@ def create_appointment(appointment: AppointmentCreate, db: Session = Depends(get
     return {"message": "Agendamento realizado com sucesso!"}
 
 
-# --- ROTAS PROTEGIDAS (Área administrativa) ---
+# --- ÁREA ADMINISTRATIVA ---
 
 @app.get("/clients")
-def list_clients(
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
+def list_clients(current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
     clients = db.query(Client).filter(Client.business_id == current_business.id).all()
     return [{"id": c.id, "name": c.name, "phone": c.phone} for c in clients]
 
-
 @app.delete("/client/{client_id}")
-def delete_client(
-    client_id: int,
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
-    client = db.query(Client).filter(
-        Client.id == client_id,
-        Client.business_id == current_business.id
-    ).first()
+def delete_client(client_id: int, current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
+    client = db.query(Client).filter(Client.id == client_id, Client.business_id == current_business.id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Cliente não encontrado.")
     db.delete(client)
     db.commit()
     return {"message": "Cliente removido com sucesso!"}
 
-
 @app.get("/appointments")
-def list_appointments(
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
+def list_appointments(current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
     appointments = db.query(Appointment).filter(Appointment.business_id == current_business.id).all()
     result = []
     for ap in appointments:
         client = db.query(Client).filter(Client.id == ap.client_id).first()
+        service = db.query(Service).filter(Service.id == ap.service_id).first() if ap.service_id else None
         result.append({
             "id": ap.id,
             "client_name": client.name if client else "Cliente removido",
+            "service_name": service.name if service else None,
+            "service_price": float(service.price) if service else None,
             "date": ap.date,
             "time": ap.time
         })
     return result
 
-
 @app.delete("/appointment/{appointment_id}")
-def delete_appointment(
-    appointment_id: int,
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
+def delete_appointment(appointment_id: int, current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
     appointment = db.query(Appointment).filter(
-        Appointment.id == appointment_id,
-        Appointment.business_id == current_business.id
+        Appointment.id == appointment_id, Appointment.business_id == current_business.id
     ).first()
     if not appointment:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
@@ -420,16 +493,10 @@ def delete_appointment(
     db.commit()
     return {"message": "Agendamento removido com sucesso!"}
 
-
 @app.get("/clients/public/{business_id}")
 def list_public_clients(business_id: int, db: Session = Depends(get_db)):
-    # Removido: essa rota expunha nome de todos os clientes de um estabelecimento
-    # publicamente, sem autenticação. Não é mais usada — a identificação do
-    # cliente no agendamento agora é feita via /client/lookup, por telefone.
     raise HTTPException(status_code=410, detail="Rota descontinuada.")
 
-
-# --- CONFIGURAÇÃO DE HORÁRIO DE ATENDIMENTO (Área administrativa) ---
 
 @app.get("/schedule")
 def get_schedule(current_business: Business = Depends(get_current_business)):
@@ -441,7 +508,6 @@ def get_schedule(current_business: Business = Depends(get_current_business)):
         "capacity": current_business.capacity
     }
 
-
 @app.put("/schedule")
 def update_schedule(
     schedule: ScheduleUpdate,
@@ -452,7 +518,6 @@ def update_schedule(
     end_h = int(schedule.end_time.split(":")[0])
     if end_h <= start_h:
         raise HTTPException(status_code=400, detail="O horário de término deve ser depois do horário de início.")
-
     current_business.working_days = schedule.working_days
     current_business.start_time = schedule.start_time
     current_business.end_time = schedule.end_time
@@ -462,21 +527,10 @@ def update_schedule(
     return {"message": "Horário de atendimento atualizado com sucesso!"}
 
 
-# --- BLOQUEIO DE DIAS E HORÁRIOS (Área administrativa) ---
-
 @app.get("/blocked-slots")
-def list_blocked_slots(
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
-    slots = db.query(BlockedSlot).filter(
-        BlockedSlot.business_id == current_business.id
-    ).order_by(BlockedSlot.date).all()
-    return [
-        {"id": s.id, "date": s.date, "time": s.time, "reason": s.reason}
-        for s in slots
-    ]
-
+def list_blocked_slots(current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
+    slots = db.query(BlockedSlot).filter(BlockedSlot.business_id == current_business.id).order_by(BlockedSlot.date).all()
+    return [{"id": s.id, "date": s.date, "time": s.time, "reason": s.reason} for s in slots]
 
 @app.post("/blocked-slots", status_code=status.HTTP_201_CREATED)
 def create_blocked_slot(
@@ -497,31 +551,17 @@ def create_blocked_slot(
     if existing:
         raise HTTPException(status_code=400, detail="Esse dia/horário já está bloqueado.")
 
-    new_block = BlockedSlot(
-        business_id=current_business.id,
-        date=blocked.date,
-        time=blocked.time,
-        reason=blocked.reason
-    )
+    new_block = BlockedSlot(business_id=current_business.id, date=blocked.date, time=blocked.time, reason=blocked.reason)
     db.add(new_block)
     db.commit()
     db.refresh(new_block)
     return {"message": "Bloqueio criado com sucesso!", "id": new_block.id}
 
-
 @app.delete("/blocked-slots/{block_id}")
-def delete_blocked_slot(
-    block_id: int,
-    current_business: Business = Depends(get_current_business),
-    db: Session = Depends(get_db)
-):
-    block = db.query(BlockedSlot).filter(
-        BlockedSlot.id == block_id,
-        BlockedSlot.business_id == current_business.id
-    ).first()
+def delete_blocked_slot(block_id: int, current_business: Business = Depends(get_current_business), db: Session = Depends(get_db)):
+    block = db.query(BlockedSlot).filter(BlockedSlot.id == block_id, BlockedSlot.business_id == current_business.id).first()
     if not block:
         raise HTTPException(status_code=404, detail="Bloqueio não encontrado.")
-
     db.delete(block)
     db.commit()
     return {"message": "Bloqueio removido com sucesso!"}

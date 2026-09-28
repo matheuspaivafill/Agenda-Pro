@@ -1,9 +1,9 @@
 import re
 from pydantic import BaseModel, EmailStr, field_validator
+from decimal import Decimal
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
-# Esquemas para a Empresa / Estabelecimento
 class BusinessCreate(BaseModel):
     name: str
     email: EmailStr
@@ -40,7 +40,6 @@ class BusinessLogin(BaseModel):
     email: EmailStr
     password: str
 
-# Esquemas para Cliente
 class ClientCreate(BaseModel):
     business_id: int
     name: str
@@ -54,11 +53,11 @@ class ClientCreate(BaseModel):
             raise ValueError("Campo obrigatório não pode ficar vazio.")
         return v
 
-# Esquemas para Agendamento
 class AppointmentCreate(BaseModel):
     business_id: int
     client_id: int
-    phone: str  # confirmação: precisa bater com o telefone cadastrado do cliente
+    service_id: int | None = None
+    phone: str
     date: str
     time: str
 
@@ -74,13 +73,12 @@ class AppointmentCreate(BaseModel):
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 ALLOWED_DURATIONS = [15, 30, 45, 60, 90, 120]
 
-# Esquemas para configuração de horário de atendimento
 class ScheduleUpdate(BaseModel):
-    working_days: str  # Ex: "0,1,2,3,4" (0=Segunda ... 6=Domingo)
-    start_time: str    # Ex: "08:00"
-    end_time: str       # Ex: "18:00"
-    slot_duration_minutes: int = 60  # intervalo entre horários disponíveis
-    capacity: int = 1  # quantos atendimentos simultâneos (ex: nº de profissionais)
+    working_days: str
+    start_time: str
+    end_time: str
+    slot_duration_minutes: int = 60
+    capacity: int = 1
 
     @field_validator("working_days")
     @classmethod
@@ -115,10 +113,9 @@ class ScheduleUpdate(BaseModel):
             raise ValueError(f"Intervalo inválido. Use um destes: {ALLOWED_DURATIONS}.")
         return v
 
-# Esquemas para bloqueio de dias/horários
 class BlockedSlotCreate(BaseModel):
     date: str
-    time: str | None = None  # se não informado, bloqueia o dia inteiro
+    time: str | None = None
     reason: str | None = None
 
     @field_validator("time")
@@ -126,4 +123,31 @@ class BlockedSlotCreate(BaseModel):
     def validate_time_format(cls, v):
         if v is not None and not TIME_RE.match(v):
             raise ValueError("Horário inválido. Use o formato HH:MM.")
+        return v
+
+class ServiceCreate(BaseModel):
+    name: str
+    price: Decimal
+    duration_minutes: int
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("O nome do serviço não pode ficar vazio.")
+        return v
+
+    @field_validator("price")
+    @classmethod
+    def price_positive(cls, v):
+        if v < 0:
+            raise ValueError("O preço não pode ser negativo.")
+        return v
+
+    @field_validator("duration_minutes")
+    @classmethod
+    def duration_positive(cls, v):
+        if v < 5 or v > 480:
+            raise ValueError("A duração deve ser entre 5 minutos e 8 horas.")
         return v

@@ -1,77 +1,58 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-
-    <script src="config.js?v=2"></script>
-    
     <meta charset="UTF-8">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agenda Pro</title>
-
+    <script src="config.js?v=3"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
-    <link rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossorigin>
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet">
-
-    <link rel="stylesheet" href="style.css?v=5">
-
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
-
 <body>
+    <div class="home-container">
 
-<div class="home-container">
+        <h1 class="logo">Agenda <span>Pro</span></h1>
+        <p class="subtitle">Gerencie clientes e agendamentos de forma simples, rápida e organizada.</p>
 
-    <h1 class="logo">
-        Agenda <span>Pro</span>
-    </h1>
+        <div style="margin-top: 32px;">
 
-    <p class="subtitle">
-        Gerencie clientes e agendamentos de forma simples, rápida e organizada.
-    </p>
+            <div class="home-card" onclick="window.location.href='customer.html'">
+                <div class="icon-box">👤</div>
+                <div>
+                    <h2>Sou Cliente</h2>
+                    <p>Marque seu horário em poucos minutos.</p>
+                </div>
+            </div>
 
-    <div class="home-card"
-         onclick="window.location.href='customer.html'">
+            <div class="home-card" onclick="window.location.href='admin.html'">
+                <div class="icon-box">🛠</div>
+                <div>
+                    <h2>Área Administrativa</h2>
+                    <p>Acesse o painel para gerenciar clientes, serviços e agendamentos.</p>
+                </div>
+            </div>
 
-        <div class="icon-box">
-            👤
         </div>
 
-        <h2>Sou Cliente</h2>
-
-        <p>
-            Marque seu horário em poucos minutos.
-        </p>
-
-    </div>
-
-    <div class="home-card"
-         onclick="window.location.href='admin.html'">
-
-        <div class="icon-box">
-            🛠
+        <div class="feature-row">
+            <div class="feature-item">
+                <div class="feature-icon">⏱️</div>
+                <p>Agende 24h por dia</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">📱</div>
+                <p>Direto do celular</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">🔒</div>
+                <p>Seus dados protegidos</p>
+            </div>
         </div>
 
-        <h2>Área Administrativa</h2>
-
-        <p>
-            Acesse o painel para gerenciar clientes e agendamentos.
-        </p>
+        <p style="margin-top: 28px; font-size: 13px; color: var(--muted);">Agenda Pro © 2026</p>
 
     </div>
-
-    <footer>
-
-        Agenda Pro © 2026
-
-    </footer>
-
-</div>
-
 </body>
-
 </html>
