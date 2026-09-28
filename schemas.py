@@ -69,6 +69,10 @@ class AppointmentCreate(BaseModel):
             raise ValueError("Informe o telefone para confirmar o agendamento.")
         return v
 
+class AppointmentUpdate(BaseModel):
+    date: str | None = None
+    time: str | None = None
+    status: str | None = None
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 ALLOWED_DURATIONS = [15, 30, 45, 60, 90, 120]
