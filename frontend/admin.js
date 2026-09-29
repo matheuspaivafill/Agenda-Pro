@@ -153,7 +153,21 @@ function loadAppointments() {
             }
 
             appointmentCard.appendChild(info)
-            appointmentCard.appendChild(deleteButton)
+
+            const actions = document.createElement("div")
+            actions.style.display = "flex"
+            actions.style.gap = "6px"
+
+            const editButton = document.createElement("button")
+            editButton.innerText = "✏️"
+            editButton.title = "Remarcar"
+            editButton.addEventListener("click", function() {
+                openRescheduleForm(appointment)
+            })
+
+            actions.appendChild(editButton)
+            actions.appendChild(deleteButton)
+            appointmentCard.appendChild(actions)
 
             deleteButton.addEventListener("click", function() {
                 if (!confirm("Deseja realmente excluir este agendamento?")) return
@@ -167,6 +181,30 @@ function loadAppointments() {
         })
     })
     .catch(error => console.error(error))
+}
+
+// --- REMARCAR AGENDAMENTO ---
+function openRescheduleForm(appointment) {
+    const newDate = prompt("Nova data (AAAA-MM-DD):", appointment.date)
+    if (!newDate) return
+    const newTime = prompt("Novo horário (HH:MM):", appointment.time)
+    if (!newTime) return
+
+    fetch(`${API_URL}/appointment/${appointment.id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ date: newDate, time: newTime })
+    })
+    .then(async response => {
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.detail || "Erro ao remarcar")
+        return data
+    })
+    .then(data => {
+        showToast(data.message)
+        loadAppointments()
+    })
+    .catch(error => showToast(error.message, true))
 }
 
 loadClients()

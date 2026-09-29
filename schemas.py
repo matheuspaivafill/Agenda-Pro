@@ -69,10 +69,6 @@ class AppointmentCreate(BaseModel):
             raise ValueError("Informe o telefone para confirmar o agendamento.")
         return v
 
-class AppointmentUpdate(BaseModel):
-    date: str | None = None
-    time: str | None = None
-    status: str | None = None
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 ALLOWED_DURATIONS = [15, 30, 45, 60, 90, 120]
@@ -155,3 +151,29 @@ class ServiceCreate(BaseModel):
         if v < 5 or v > 480:
             raise ValueError("A duração deve ser entre 5 minutos e 8 horas.")
         return v
+
+
+# Esquema para editar/remarcar um agendamento já existente
+class AppointmentUpdate(BaseModel):
+    date: str
+    time: str
+
+# Esquemas para recuperação de senha
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_min_length(cls, v):
+        if len(v) < 8:
+            raise ValueError("A senha deve ter pelo menos 8 caracteres.")
+        return v
+
+# Esquema para o cliente cancelar o próprio agendamento
+class CancelAppointmentRequest(BaseModel):
+    business_id: int
+    phone: str

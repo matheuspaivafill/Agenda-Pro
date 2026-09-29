@@ -159,6 +159,45 @@ def login(login_data: BusinessLogin, db: Session = Depends(get_db)):
     return {"message": "Login realizado com sucesso!", "token": token, "slug": business.slug}
 
 
+@app.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    business = db.query(Business).filter(Business.email == req.email).first()
+
+    # Por segurança, sempre respondemos a mesma mensagem — não revela se o e-mail existe ou não.
+    generic_message = {"message": "Se esse e-mail estiver cadastrado, você vai receber um link de recuperação em instantes."}
+
+    if not business:
+        return generic_message
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.utcnow() + timedelta(hours=1)
+    business.reset_token = token
+    business.reset_token_expires = expires.isoformat()
+    db.commit()
+
+    reset_link = f"{FRONTEND_URL}/reset-password.html?token={token}"
+    send_reset_email(business.email, reset_link)
+
+    return generic_message
+
+
+@app.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    business = db.query(Business).filter(Business.reset_token == req.token).first()
+    if not business or not business.reset_token_expires:
+        raise HTTPException(status_code=400, detail="Link inválido ou expirado. Peça um novo.")
+
+    expires = datetime.fromisoformat(business.reset_token_expires)
+    if datetime.utcnow() > expires:
+        raise HTTPException(status_code=400, detail="Link expirado. Peça um novo.")
+
+    business.password_hash = hash_password(req.new_password)
+    business.reset_token = None
+    business.reset_token_expires = None
+    db.commit()
+    return {"message": "Senha redefinida com sucesso! Já pode fazer login."}
+
+
 @app.get("/business/slug/{slug}")
 def get_business_by_slug(slug: str, db: Session = Depends(get_db)):
     business = db.query(Business).filter(Business.slug == slug.lower()).first()
@@ -207,7 +246,13 @@ def client_upcoming_appointments(business_id: int, phone: str, db: Session = Dep
         except ValueError:
             continue
         if ap_date >= today:
-            upcoming.append({"date": ap.date, "time": ap.time})
+            service = db.query(Service).filter(Service.id == ap.service_id).first() if ap.service_id else None
+            upcoming.append({
+                "id": ap.id,
+                "date": ap.date,
+                "time": ap.time,
+                "service_name": service.name if service else None
+            })
     upcoming.sort(key=lambda a: (a["date"], a["time"]))
     return upcoming
 
@@ -492,6 +537,85 @@ def delete_appointment(appointment_id: int, current_business: Business = Depends
     db.delete(appointment)
     db.commit()
     return {"message": "Agendamento removido com sucesso!"}
+
+
+@app.put("/appointment/{appointment_id}")
+def update_appointment(
+    appointment_id: int,
+    update: AppointmentUpdate,
+    current_business: Business = Depends(get_current_business),
+    db: Session = Depends(get_db)
+):
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.business_id == current_business.id
+    ).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+
+    try:
+        parsed_date = datetime.strptime(update.date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida. Use o formato AAAA-MM-DD.")
+
+    working_days = [int(d) for d in current_business.working_days.split(",")]
+    if parsed_date.weekday() not in working_days:
+        raise HTTPException(status_code=400, detail="O estabelecimento não atende nesse dia da semana.")
+
+    if get_business_day_blocked(db, current_business.id, update.date):
+        raise HTTPException(status_code=400, detail="O estabelecimento não está atendendo nessa data.")
+
+    all_times = generate_time_slots(current_business.start_time, current_business.end_time, current_business.slot_duration_minutes)
+    if update.time not in all_times:
+        raise HTTPException(status_code=400, detail="Horário fora do funcionamento do estabelecimento.")
+
+    slot_blocked = db.query(BlockedSlot).filter(
+        BlockedSlot.business_id == current_business.id,
+        BlockedSlot.date == update.date,
+        BlockedSlot.time == update.time
+    ).first()
+    if slot_blocked:
+        raise HTTPException(status_code=400, detail="Esse horário não está disponível.")
+
+    # Conta quantos agendamentos já existem nesse novo horário, sem contar o próprio
+    # agendamento que está sendo movido (senão ele bloquearia a si mesmo).
+    existing_count = db.query(Appointment).filter(
+        Appointment.business_id == current_business.id,
+        Appointment.date == update.date,
+        Appointment.time == update.time,
+        Appointment.id != appointment_id
+    ).count()
+    if existing_count >= current_business.capacity:
+        raise HTTPException(status_code=400, detail="Horário já ocupado nesta empresa.")
+
+    appointment.date = update.date
+    appointment.time = update.time
+    db.commit()
+    return {"message": "Agendamento remarcado com sucesso!"}
+
+
+@app.delete("/client/appointment/{appointment_id}")
+def cancel_appointment_by_client(
+    appointment_id: int,
+    cancel: CancelAppointmentRequest,
+    db: Session = Depends(get_db)
+):
+    """Permite que o próprio cliente cancele um agendamento seu, sem precisar
+    falar com o estabelecimento — validado pelo telefone, sem exigir senha."""
+    appointment = db.query(Appointment).filter(
+        Appointment.id == appointment_id,
+        Appointment.business_id == cancel.business_id
+    ).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+
+    client = db.query(Client).filter(Client.id == appointment.client_id).first()
+    if not client or digits_only(client.phone) != digits_only(cancel.phone):
+        raise HTTPException(status_code=403, detail="O telefone informado não confere com o cadastro deste cliente.")
+
+    db.delete(appointment)
+    db.commit()
+    return {"message": "Agendamento cancelado com sucesso."}
+
 
 @app.get("/clients/public/{business_id}")
 def list_public_clients(business_id: int, db: Session = Depends(get_db)):

@@ -290,3 +290,110 @@ appointmentForm.addEventListener("submit", function(event) {
 })
 
 initBusinessContext()
+
+// --- ABAS: AGENDAR / MEUS AGENDAMENTOS ---
+const tabBtnBook = document.getElementById("tab-btn-book")
+const tabBtnMyAppointments = document.getElementById("tab-btn-my-appointments")
+const tabContentBook = document.getElementById("tab-content-book")
+const tabContentMyAppointments = document.getElementById("tab-content-my-appointments")
+const myAppointmentsPhone = document.getElementById("my-appointments-phone")
+const myAppointmentsSearchBtn = document.getElementById("my-appointments-search-btn")
+const myAppointmentsList = document.getElementById("my-appointments-list")
+
+if (tabBtnBook && tabBtnMyAppointments) {
+    tabBtnBook.addEventListener("click", function() {
+        tabBtnBook.classList.add("active")
+        tabBtnMyAppointments.classList.remove("active")
+        tabContentBook.style.display = "flex"
+        tabContentMyAppointments.style.display = "none"
+        if (selectBusinessSection.style.display !== "none") {
+            // mantém visível se ainda não tiver estabelecimento escolhido
+        }
+    })
+
+    tabBtnMyAppointments.addEventListener("click", function() {
+        tabBtnMyAppointments.classList.add("active")
+        tabBtnBook.classList.remove("active")
+        tabContentBook.style.display = "none"
+        tabContentMyAppointments.style.display = "block"
+    })
+}
+
+function loadMyAppointments() {
+    const phone = myAppointmentsPhone.value.trim()
+    if (!window.currentBusinessId) {
+        showToast("Selecione um estabelecimento primeiro (aba Agendar).", true)
+        return
+    }
+    if (phone.replace(/\D/g, "").length < 8) {
+        showToast("Digite um telefone válido.", true)
+        return
+    }
+
+    myAppointmentsList.innerHTML = "<p class='section-description'>Buscando...</p>"
+
+    fetch(`${API_URL}/client/appointments?business_id=${window.currentBusinessId}&phone=${encodeURIComponent(phone)}`)
+    .then(res => res.json())
+    .then(appointments => {
+        myAppointmentsList.innerHTML = ""
+
+        if (!appointments || appointments.length === 0) {
+            myAppointmentsList.innerHTML = "<p class='section-description'>Nenhum agendamento encontrado com esse telefone.</p>"
+            return
+        }
+
+        appointments.forEach(ap => {
+            const item = document.createElement("div")
+            item.classList.add("blocked-slot-item")
+
+            const info = document.createElement("div")
+            const title = document.createElement("strong")
+            title.innerText = `${formatDateBR(ap.date)} às ${ap.time}`
+            info.appendChild(title)
+            if (ap.service_name) {
+                const serviceEl = document.createElement("p")
+                serviceEl.style.margin = "4px 0 0"
+                serviceEl.style.fontSize = "13px"
+                serviceEl.style.color = "var(--muted)"
+                serviceEl.innerText = ap.service_name
+                info.appendChild(serviceEl)
+            }
+
+            const cancelBtn = document.createElement("button")
+            cancelBtn.classList.add("btn-secondary")
+            cancelBtn.type = "button"
+            cancelBtn.innerText = "Cancelar"
+            cancelBtn.addEventListener("click", function() {
+                if (!confirm("Tem certeza que deseja cancelar esse agendamento?")) return
+
+                fetch(`${API_URL}/client/appointment/${ap.id}`, {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ business_id: window.currentBusinessId, phone: phone })
+                })
+                .then(async response => {
+                    const data = await response.json()
+                    if (!response.ok) throw new Error(data.detail || "Erro ao cancelar")
+                    return data
+                })
+                .then(data => {
+                    showToast(data.message)
+                    loadMyAppointments()
+                })
+                .catch(error => showToast(error.message, true))
+            })
+
+            item.appendChild(info)
+            item.appendChild(cancelBtn)
+            myAppointmentsList.appendChild(item)
+        })
+    })
+    .catch(error => {
+        console.error(error)
+        myAppointmentsList.innerHTML = "<p class='section-description'>Erro ao buscar agendamentos.</p>"
+    })
+}
+
+if (myAppointmentsSearchBtn) {
+    myAppointmentsSearchBtn.addEventListener("click", loadMyAppointments)
+}
